@@ -6,9 +6,13 @@ on:
   schedule:
     - cron: "17 3 * * 1"   # every Monday: catch breakage from new `ai` / `@ag-ui/*` releases
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
+    # A hung stream or child process should fail fast, not hold the runner for hours.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
