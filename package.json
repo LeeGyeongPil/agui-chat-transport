@@ -1,0 +1,60 @@
+{
+  "name": "agui-chat-transport",
+  "version": "0.1.0",
+  "description": "Use any AG-UI agent server from AI SDK useChat: a ChatTransport that converts AG-UI events to UIMessage chunks and back, and reports what it cannot map.",
+  "repository": { "type": "git", "url": "git+https://github.com/LeeGyeongPil/agui-chat-transport.git" },
+  "homepage": "https://github.com/LeeGyeongPil/agui-chat-transport#readme",
+  "bugs": { "url": "https://github.com/LeeGyeongPil/agui-chat-transport/issues" },
+  "keywords": ["ai-sdk", "useChat", "ag-ui", "agent", "transport", "langgraph", "mastra"],
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./testing": { "types": "./dist/testing/index.d.ts", "import": "./dist/testing/index.js" },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "docs/mapping.md", "README.md", "README.ko.md", "CHANGELOG.md", "LICENSE"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && vitest run",
+    "example": "node --import tsx examples/quickstart.ts",
+    "example:web": "vite examples/react-chat",
+    "example:web:build": "vite build examples/react-chat",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "fast-json-patch": "3.1.2"
+  },
+  "peerDependencies": {
+    "@ag-ui/client": "^1.0.5",
+    "@ag-ui/core": "^1.0.5",
+    "@ag-ui/encoder": "^1.0.5",
+    "ai": "^7.0.181"
+  },
+  "peerDependenciesMeta": {
+    "@ag-ui/encoder": { "optional": true }
+  },
+  "devDependencies": {
+    "@ag-ui/client": "^1.0.5",
+    "@ag-ui/core": "^1.0.5",
+    "@ag-ui/encoder": "^1.0.5",
+    "@ai-sdk/react": "4.0.186",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "ai": "^7.0.181",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.1",
+    "zod": "4.6.7"
+  }
+}
