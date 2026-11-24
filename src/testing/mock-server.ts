@@ -114,14 +114,22 @@ export async function startMockAgUiServer(options: MockAgUiServerOptions = {}): 
     waitForAbort(timeoutMs = 1000) {
       if (aborted > 0) return Promise.resolve(true);
       return new Promise<boolean>((resolve) => {
-        const timer = setTimeout(() => resolve(false), timeoutMs);
-        waiters.push((v) => {
+        const waiter = (v: boolean) => {
           clearTimeout(timer);
           resolve(v);
-        });
+        };
+        // On timeout, also drop the waiter so repeated calls do not pile up.
+        const timer = setTimeout(() => {
+          const i = waiters.indexOf(waiter);
+          if (i >= 0) waiters.splice(i, 1);
+          resolve(false);
+        }, timeoutMs);
+        waiters.push(waiter);
       });
     },
     close() {
+      // Settle anyone still waiting so their timers do not outlive the server.
+      for (const w of waiters.splice(0)) w(aborted > 0);
       return new Promise<void>((resolve) => {
         server.close(() => resolve());
         server.closeAllConnections();
