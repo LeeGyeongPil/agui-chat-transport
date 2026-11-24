@@ -1,0 +1,41 @@
+[
+  {
+    "type": "step-start"
+  },
+  {
+    "type": "reasoning",
+    "id": "r1",
+    "text": "thinking",
+    "providerMetadata": {
+      "agui": {
+        "messageId": "r1"
+      }
+    },
+    "state": "done"
+  },
+  {
+    "type": "text",
+    "text": "Hello",
+    "providerMetadata": {
+      "agui": {
+        "messageId": "m1",
+        "role": "assistant"
+      }
+    },
+    "state": "done"
+  },
+  {
+    "type": "dynamic-tool",
+    "toolName": "getWeather",
+    "toolCallId": "t1",
+    "state": "input-available",
+    "input": {
+      "city": "Busan"
+    },
+    "callProviderMetadata": {
+      "agui": {
+        "parentMessageId": "m1"
+      }
+    }
+  }
+]

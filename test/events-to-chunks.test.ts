@@ -1,8 +1,16 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { EventType, type BaseEvent } from '@ag-ui/core';
 import type { UIMessageChunk } from 'ai';
-import { aguiEventsToUIMessageChunks, createAgUiChunkConverter, type UnmappedReport } from '../src/index.js';
-import { collect, validateChunks } from './helpers.js';
+import {
+  AgUiChatTransport,
+  aguiEventsToUIMessageChunks,
+  createAgUiChunkConverter,
+  type UnmappedReport,
+} from '../src/index.js';
+import { startMockAgUiServer } from '../src/testing/index.js';
+import { collect, user, validateChunks } from './helpers.js';
 
 const E = (e: Record<string, unknown>) => e as unknown as BaseEvent;
 
@@ -27,6 +35,19 @@ async function partsOf(events: BaseEvent[], opts = {}) {
   expect(schemaFailures).toEqual([]);
   return (message!.parts as Array<Record<string, any>>).map(({ providerMetadata: _p, callProviderMetadata: _c, ...rest }) => rest);
 }
+
+/** Parts exactly as the AI SDK assembles them, metadata included. */
+async function fullPartsOf(events: BaseEvent[]) {
+  const { chunks } = run(events);
+  const { message, schemaFailures } = await collect(streamOf(chunks));
+  expect(schemaFailures).toEqual([]);
+  return message!.parts;
+}
+
+/** test/fixtures/chunked.parts.json: the parts the 'chunked' scenario must produce. */
+const GOLDEN_CHUNKED_PARTS = JSON.parse(
+  readFileSync(resolve(import.meta.dirname, 'fixtures/chunked.parts.json'), 'utf8'),
+) as unknown[];
 
 const started = E({ type: EventType.RUN_STARTED, threadId: 't', runId: 'r' });
 const finished = E({ type: EventType.RUN_FINISHED, threadId: 't', runId: 'r' });
@@ -63,6 +84,30 @@ describe('AC-5 chunk expansion', () => {
     expect(b.map((p) => p.type)).toEqual(['step-start', 'reasoning', 'text', 'dynamic-tool']);
     expect(b[2]!.text).toBe('Hello');
     expect(b[3]).toMatchObject({ toolName: 'getWeather', input: { city: 'Busan' }, state: 'input-available' });
+
+    // Golden file: both forms give exactly the stored parts, AG-UI ids in providerMetadata included.
+    expect(await fullPartsOf(expanded)).toEqual(GOLDEN_CHUNKED_PARTS);
+    expect(await fullPartsOf(chunked)).toEqual(GOLDEN_CHUNKED_PARTS);
+  });
+
+  it("the mock server's 'chunked' scenario, sent over HTTP through the transport, matches the golden file", async () => {
+    const server = await startMockAgUiServer({ scenario: 'chunked' });
+    try {
+      const transport = new AgUiChatTransport({ url: server.url });
+      const { message, schemaFailures } = await collect(
+        await transport.sendMessages({
+          trigger: 'submit-message',
+          chatId: 'c',
+          messageId: undefined,
+          messages: [user('hi')],
+          abortSignal: undefined,
+        }),
+      );
+      expect(schemaFailures).toEqual([]);
+      expect(message!.parts).toEqual(GOLDEN_CHUNKED_PARTS);
+    } finally {
+      await server.close();
+    }
   });
 
   it('a chunk with a new messageId closes the previous text part', () => {

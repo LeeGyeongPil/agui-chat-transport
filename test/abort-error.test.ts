@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AgUiChatTransport, AgUiTransportConfigError } from '../src/index.js';
-import { startMockAgUiServer, type MockAgUiServer } from '../src/testing/index.js';
+import { SCENARIOS, startMockAgUiServer, type MockAgUiServer, type Scenario } from '../src/testing/index.js';
 import { collect, user } from './helpers.js';
 
 let server: MockAgUiServer | undefined;
@@ -11,6 +11,31 @@ afterEach(async () => {
 
 const send = (t: AgUiChatTransport, abortSignal?: AbortSignal) =>
   t.sendMessages({ trigger: 'submit-message', chatId: 'c', messageId: undefined, messages: [user('go')], abortSignal });
+
+/** Only fails a real hang; the checks below never depend on how fast the machine is. */
+const HANG_GUARD_MS = 15_000;
+/** The built-in 'slow' scenario sends one event every 50 ms: 20 events = 1 second of output. */
+const ONE_SECOND_OF_EVENTS = 20;
+
+/**
+ * The built-in 'slow' scenario, unchanged, plus a counter of the events the server
+ * handed out after the test pressed stop.
+ */
+function countingSlowScenario() {
+  let stopped = false;
+  let afterStop = 0;
+  const scenario: Scenario = async function* (input) {
+    for await (const event of SCENARIOS.slow(input)) {
+      if (stopped) afterStop++;
+      yield event;
+    }
+  };
+  return {
+    scenario,
+    markStop: () => void (stopped = true),
+    sentAfterStop: () => afterStop,
+  };
+}
 
 describe('AC-7 errors and stop()', () => {
   it('RUN_ERROR becomes an error chunk carrying the message', async () => {
@@ -39,16 +64,21 @@ describe('AC-7 errors and stop()', () => {
   });
 
   it('abortSignal closes the server response within 1 second and ends the stream', async () => {
-    server = await startMockAgUiServer({ scenario: 'slow' });
+    const slow = countingSlowScenario();
+    server = await startMockAgUiServer({ events: slow.scenario });
     const controller = new AbortController();
     const stream = await send(new AgUiChatTransport({ url: server.url }), controller.signal);
     const reader = stream.getReader();
     const first = await reader.read();
     expect(first.done).toBe(false);
-    const t0 = Date.now();
+    slow.markStop();
     controller.abort();
-    expect(await server.waitForAbort(1000)).toBe(true);
-    expect(Date.now() - t0).toBeLessThan(1000);
+    // Wait for the server's own 'close' event (no fixed sleep). HANG_GUARD_MS only fails a hang.
+    expect(await server.waitForAbort(HANG_GUARD_MS)).toBe(true);
+    // "Within 1 second" is measured on the scenario's own clock: it sends one event every
+    // 50 ms, so 1 second is 20 events. Counting events (not wall time) keeps the check exact
+    // when a busy machine pauses the whole process (client and mock server share it).
+    expect(slow.sentAfterStop()).toBeLessThan(ONE_SECOND_OF_EVENTS);
     // Stream terminates (no hang): drain until done.
     for (;;) {
       const { done } = await reader.read();
@@ -57,11 +87,14 @@ describe('AC-7 errors and stop()', () => {
   });
 
   it('cancelling the stream reader also stops the run', async () => {
-    server = await startMockAgUiServer({ scenario: 'slow' });
+    const slow = countingSlowScenario();
+    server = await startMockAgUiServer({ events: slow.scenario });
     const reader = (await send(new AgUiChatTransport({ url: server.url }))).getReader();
     await reader.read();
+    slow.markStop();
     await reader.cancel();
-    expect(await server.waitForAbort(1000)).toBe(true);
+    expect(await server.waitForAbort(HANG_GUARD_MS)).toBe(true);
+    expect(slow.sentAfterStop()).toBeLessThan(ONE_SECOND_OF_EVENTS);
   });
 
   it('an already aborted signal never contacts the server', async () => {

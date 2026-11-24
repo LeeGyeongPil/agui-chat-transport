@@ -24,7 +24,9 @@ describe('AC-1 build output and public names', () => {
     }
     const testing = await import(resolve(root, 'dist/testing/index.js'));
     expect(typeof testing.startMockAgUiServer).toBe('function');
-  });
+    // Loading dist pulls in `ai` and `@ag-ui/client` from disk a second time (outside
+    // vitest's module cache); on a busy machine that alone took over 20 s.
+  }, 180_000);
 
   it('package.json publishes dist/ and every export target exists', () => {
     const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));

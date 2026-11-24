@@ -10,30 +10,67 @@ afterEach(async () => {
   server = undefined;
 });
 
+/** Minimal ChatState (what useChat keeps in React state) that tells listeners about every change. */
 class State {
-  status: 'ready' | 'submitted' | 'streaming' | 'error' = 'ready';
+  readonly listeners = new Set<() => void>();
+  #status: 'ready' | 'submitted' | 'streaming' | 'error' = 'ready';
+  #messages: UIMessage[] = [];
   error: Error | undefined = undefined;
-  messages: UIMessage[] = [];
+  get status() {
+    return this.#status;
+  }
+  set status(v) {
+    this.#status = v;
+    this.changed();
+  }
+  get messages() {
+    return this.#messages;
+  }
+  set messages(v) {
+    this.#messages = v;
+    this.changed();
+  }
   pushMessage = (m: UIMessage) => void (this.messages = this.messages.concat(m));
   popMessage = () => void (this.messages = this.messages.slice(0, -1));
   replaceMessage = (i: number, m: UIMessage) => void (this.messages = this.messages.map((x, j) => (j === i ? m : x)));
   snapshot = <T>(t: T): T => structuredClone(t);
+  private changed() {
+    for (const fn of [...this.listeners]) fn();
+  }
 }
 
 const getWeather = { name: 'getWeather', description: 'w', parameters: { type: 'object', properties: { city: { type: 'string' } } } };
 
-async function until(cond: () => boolean): Promise<void> {
-  for (let i = 0; i < 100 && !cond(); i++) await new Promise((r) => setTimeout(r, 50));
+/**
+ * Resolve as soon as `cond()` is true, re-checking on every chat state change (no polling,
+ * no fixed wait). Rejects right away if the chat reports an error; a real hang is ended
+ * by the test timeout.
+ */
+function until(state: State, cond: () => boolean): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (state.status === 'error') {
+        state.listeners.delete(check);
+        reject(state.error ?? new Error('chat status became error'));
+      } else if (cond()) {
+        state.listeners.delete(check);
+        resolve();
+      }
+    };
+    state.listeners.add(check);
+    check();
+  });
 }
 
 describe('browser tool round trip through AbstractChat (what useChat uses)', () => {
   it('continues one assistant message and never repeats a tool call in the next request', async () => {
     server = await startMockAgUiServer({ scenario: 'weather' });
     const transport = new AgUiChatTransport({ url: server.url, tools: [getWeather] });
+    const state = new State();
     let chat!: AbstractChat<UIMessage>;
     chat = new (class extends AbstractChat<UIMessage> {})({
       id: 'chat-1',
-      state: new State(),
+      state,
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       onToolCall({ toolCall }) {
@@ -42,7 +79,7 @@ describe('browser tool round trip through AbstractChat (what useChat uses)', () 
     });
 
     await chat.sendMessage({ text: 'Weather in Seoul?' });
-    await until(() => server!.received.length >= 2 && chat.status === 'ready');
+    await until(state, () => server!.received.length >= 2 && chat.status === 'ready');
 
     expect(chat.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
     const types = chat.messages[1]!.parts.map((p) => p.type);
@@ -52,7 +89,7 @@ describe('browser tool round trip through AbstractChat (what useChat uses)', () 
     expect(lastText.text).toBe('It is sunny.');
 
     await chat.sendMessage({ text: 'And Busan?' });
-    await until(() => server!.received.length >= 3 && chat.status === 'ready');
+    await until(state, () => server!.received.length >= 3 && chat.status === 'ready');
     const third = server.received[2]!;
     const callIds = third.messages.flatMap((m: any) => (m.toolCalls ?? []).map((t: any) => t.id));
     const resultIds = third.messages.filter((m: any) => m.role === 'tool').map((m: any) => m.id);
