@@ -3,7 +3,11 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.1] - 2026-11-25
+
+### Fixed
+- `startMockAgUiServer`: `waitForAbort()` no longer leaves its waiter behind after a timeout, and `close()` settles any pending `waitForAbort()` call right away instead of letting its timer run on.
+- Tests no longer depend on machine speed: stop/abort checks count the events the server sent after stop instead of wall time, the chat round-trip test waits on chat state changes instead of polling, and the quickstart child processes run asynchronously and in parallel with generous hang guards. A golden file (`test/fixtures/chunked.parts.json`) now pins the parts of the `chunked` scenario.
 
 ## [0.1.0] - 2026-11-25
 
