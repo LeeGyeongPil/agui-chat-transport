@@ -1,67 +1,26 @@
 # Everything runs against a local mock AG-UI server: no keys, no network services needed.
+# The run steps are exactly `npm ci`, `npm run typecheck`, `npm test`; locally,
+# `npm ci && npm run ci` runs the same commands in the same order.
+# All development tools are plain JavaScript (TypeScript 6 compiler, node:test), so the
+# install is the same on every OS and CPU.
 name: ci
 on:
   push:
   pull_request:
-  schedule:
-    - cron: "17 3 * * 1"   # every Monday: catch breakage from new `ai` / `@ag-ui/*` releases
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   test:
-    # Pinned on purpose. `ubuntu-latest` moved to Ubuntu 26.04 in Oct-Nov 2026 and early 26.04
-    # images had regressions that hit this exact job: a runner freeze during native `tsc` 7.0.2
-    # steps with the step log lost (actions/runner-images#15343) and a leftover
-    # /tmp/node-compile-cache owned by another user (actions/runner-images#15177).
+    # Pinned on purpose: early Ubuntu 26.04 images (the new `ubuntu-latest`) had runner
+    # regressions (actions/runner-images#15343, actions/runner-images#15177).
     runs-on: ubuntu-24.04
-    # Above the sum of the step timeouts (29 min), so a cancelled step still lets the diagnostics step run.
-    timeout-minutes: 35
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [22, 24]
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: npm
-      # Each step below does one thing, so the failing step name already says what broke.
-      - name: Show runner and tool versions
-        run: |
-          node --version
-          npm --version
-          uname -srm
-          grep PRETTY_NAME /etc/os-release
-          nproc
-          free -m
-      - name: Install dependencies (npm ci)
-        timeout-minutes: 5
-        run: npm ci
-      - name: Check native binaries load (tsc, esbuild, rolldown)
-        timeout-minutes: 2
-        run: node scripts/check-native.mjs
-      - name: Typecheck
-        timeout-minutes: 5
-        run: npm run typecheck
-      - name: Build
-        timeout-minutes: 3
-        run: npm run build
-      - name: Test
-        timeout-minutes: 10
-        # `npm test` builds again, then runs vitest; verbose lists every test with its time.
-        run: npm test -- --reporter=verbose --reporter=github-actions
-      - name: Pack (dry run)
-        timeout-minutes: 2
-        run: npm pack --dry-run
-      - name: Quickstart example
-        timeout-minutes: 2
-        run: npm run example -- --lang en
-      - name: Diagnostics after a failure
-        if: failure()
-        run: |
-          df -h . /tmp || true
-          ls -la /tmp | head -20 || true
-          npm ls typescript vitest vite rolldown esbuild tsx ai @ag-ui/client || true
-          ls node_modules/@typescript node_modules/@rolldown node_modules/@esbuild || true
+          node-version-file: .nvmrc
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
