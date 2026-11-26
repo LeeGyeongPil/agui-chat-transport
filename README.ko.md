@@ -160,7 +160,7 @@ const { messages, sendMessage, addToolOutput } = useChat({
 });
 ```
 
-**2. 이벤트를 직접 변환하기**(서버 쪽 중계, 테스트). `useChat` 없이 단독으로 씁니다(빌드 결과로 실행했고, 내 프로젝트에서는 `'agui-chat-transport'` 에서 import):
+**2. 이벤트를 직접 변환하기**(서버 쪽 중계, 테스트). `useChat` 없이 단독으로 씁니다(agui-chat-transport 를 설치한 프로젝트에서 `demo.mjs` 로 저장한 뒤 `node demo.mjs` 로 실행):
 
 ```js
 import { createAgUiChunkConverter } from 'agui-chat-transport';
@@ -220,19 +220,28 @@ finish
 - **예제가 `The run failed: ...` 를 출력하고 종료 코드 1 로 끝남**(실제 모드): 메시지는 라이브러리 오류입니다. 위의 연결 실패 줄을 보세요.
 - **도구 호출에서 `useChat` 이 계속 기다림**: 도구 이름이 `tools` 에 있어 브라우저 도구로 취급됩니다. `addToolOutput` 을 호출하거나, 서버가 실행하는 도구면 `tools` 에서 빼세요.
 - **`onUnmapped` 에 이벤트가 나옴**: 보고 대상 9종이면 정상입니다([docs/mapping.md](docs/mapping.md)). 하나를 데이터 파트로 살리려면 `passthrough` 를 쓰세요.
-- **샌드박스에서 `tsx` 가 소켓 EPERM 으로 실패**: 스크립트는 이미 `node --import tsx` 를 씁니다. `npx tsx` 말고 `npm run example` 을 쓰세요.
+- **`npm run example:web` 첫 실행이 오래 걸림**: 웹 예제는 별도 패키지라 처음 실행할 때 Vite·React 를 `examples/react-chat/node_modules` 에 설치합니다.
 
 ## 버전·호환성
 
 - 유의적 버전(SemVer)을 따릅니다. 0.x 동안은 마이너 버전에서 API 가 바뀔 수 있고, 바뀌면 [CHANGELOG.md](CHANGELOG.md) 에 적습니다.
+- 확인한 버전: `ai` 7.0.181, `@ag-ui/client` 1.0.5, Node.js 22.23.5(CI)·26.13.0. 개발 도구: TypeScript 6.0.3, Node 내장 테스트 러너 `node:test`.
 
 ## 개발·기여
 
+CI 는 Node 22.23.5(`.nvmrc` 의 버전)에서 정확히 아래 명령을 이 순서로 실행합니다.
+
 ```bash
-npm install
+npm ci
 npm run typecheck
 npm test
 ```
+
+`npm run ci` 가 뒤의 두 명령을 한 번에 돌리므로, 내 컴퓨터에서 `npm ci && npm run ci` 를 실행하면 CI 와 같은 확인이 됩니다. `npm test` 는 `dist/` 를 빌드하고, 소스·테스트·quickstart 를 TypeScript 컴파일러로 `.build/` 에 컴파일한 뒤 Node 내장 테스트 러너(`node --test`)로 실행합니다. 개발 도구는 모두 순수 JavaScript(TypeScript 6, `node:test`)라 어느 OS·CPU 에서든 설치 결과가 같습니다.
+
+릴리스 전에는 `npm run release:check` 로 `npm pack` 이 올릴 파일 목록(`dist/`, 문서, 라이선스만)을 확인합니다.
+
+웹 예제는 `examples/react-chat/` 의 별도 패키지(자기 잠금 파일 포함)라 루트 설치와 CI 에 들어가지 않습니다. `npm run example:web` 이 처음 실행할 때 설치합니다.
 
 ## 라이선스
 

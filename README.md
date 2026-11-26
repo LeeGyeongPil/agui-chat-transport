@@ -158,7 +158,7 @@ const { messages, sendMessage, addToolOutput } = useChat({
 });
 ```
 
-**2. Convert events yourself** (a server-side relay, a test). Stand-alone, no `useChat` needed (run against the build output; in your project import from `'agui-chat-transport'`):
+**2. Convert events yourself** (a server-side relay, a test). Stand-alone, no `useChat` needed (save it as `demo.mjs` in a project where agui-chat-transport is installed, then run `node demo.mjs`):
 
 ```js
 import { createAgUiChunkConverter } from 'agui-chat-transport';
@@ -218,19 +218,28 @@ finish
 - **The example prints `The run failed: ...` and exits with code 1** (real mode): the message is the library error, see the line above.
 - **`useChat` waits forever on a tool call**: the tool name is in `tools`, so it is treated as a browser tool. Call `addToolOutput` for it, or remove it from `tools` if the server runs it.
 - **Events show up in `onUnmapped`**: expected for the 9 reported types (see [docs/mapping.md](docs/mapping.md)); use `passthrough` to keep one as a data part.
-- **`tsx` fails with EPERM on a socket in a sandbox**: the scripts already use `node --import tsx`; run `npm run example`, not `npx tsx`.
+- **`npm run example:web` takes a while the first time**: the web example is its own package and installs Vite and React into `examples/react-chat/node_modules` on first use.
 
 ## Versions and compatibility
 
 - Follows SemVer. While the version is 0.x, minor versions may change the API; changes are listed in [CHANGELOG.md](CHANGELOG.md).
+- Tested with `ai` 7.0.181, `@ag-ui/client` 1.0.5 and Node.js 22.23.5 (CI) and 26.13.0; development tools: TypeScript 6.0.3 and the built-in `node:test` runner.
 
 ## Development
 
+CI runs exactly these commands, in this order, on Node 22.23.5 (the version in `.nvmrc`):
+
 ```bash
-npm install
+npm ci
 npm run typecheck
 npm test
 ```
+
+`npm run ci` runs the last two in one go, so `npm ci && npm run ci` on your machine is the same check as CI. `npm test` builds `dist/`, compiles the sources, tests and the quickstart to `.build/` with the TypeScript compiler, and runs them with the built-in Node test runner (`node --test`). All development tools are plain JavaScript (TypeScript 6, `node:test`), so the install is the same on every OS and CPU.
+
+Before a release, `npm run release:check` lists what `npm pack` would publish (only `dist/`, the docs and the license).
+
+The web example is a separate package in `examples/react-chat/` with its own lockfile; it is not part of the root install or CI. `npm run example:web` installs it on first use.
 
 ## License
 

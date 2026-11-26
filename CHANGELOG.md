@@ -3,6 +3,21 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-11-26
+
+The library code is the same as 0.1.2; only the development tools and CI changed.
+
+### Changed
+- Development tools are plain JavaScript only: TypeScript 6.0.3 (the JavaScript compiler) and the built-in Node test runner. Vitest, Vite, tsx and React left the root package, so `npm ci` installs nothing platform-specific (no `os`/`cpu` packages, no install scripts) and gives the same result on every OS and CPU.
+- Tests moved from Vitest to `node:test` + `node:assert/strict` with the same checks. `npm test` builds `dist/`, compiles sources, tests and the quickstart to `.build/` (`tsconfig.dev.json`) and runs `node --test`. New guard tests (`test/ci-config.test.ts`) pin the workflow steps, the Node version and a lockfile without platform-specific packages.
+- `npm run example` compiles the quickstart with `tsc` and runs it with `node` (no tsx).
+- CI is one job on `ubuntu-24.04` with Node from `.nvmrc` (22.23.5) and three run steps: `npm ci`, `npm run typecheck`, `npm test`. `npm ci && npm run ci` runs the same commands locally. No matrix, cache, schedule or extra steps; actions `actions/checkout@v4` and `actions/setup-node@v4`.
+- The web example (`examples/react-chat`) is its own local-only package with its own lockfile; `npm run example:web` installs it on first use.
+- `npm run release:check` (`npm pack --dry-run`) is a local release check instead of a CI step.
+
+### Removed
+- `scripts/check-native.mjs` and `vitest.config.ts`.
+
 ## [0.1.2] - 2026-11-26
 
 ### Changed
