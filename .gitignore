@@ -11,6 +11,8 @@ __pycache__/
 node_modules/
 dist/
 .next/
+# compiled sources, tests and examples for `npm test` / `npm run example` (never published)
+.build/
 
 # 실행 산출물·모델·데이터 캐시
 runs/

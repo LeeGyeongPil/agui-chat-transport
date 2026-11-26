@@ -1,0 +1,33 @@
+{
+  "name": "agui-chat-transport-react-example",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local-only web example for agui-chat-transport (React + Vite + useChat). Not part of the root install or CI.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ag-ui/client": "1.0.5",
+    "@ag-ui/core": "1.0.5",
+    "@ag-ui/encoder": "1.0.5",
+    "@ai-sdk/react": "4.0.186",
+    "ai": "7.0.181",
+    "fast-json-patch": "3.1.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.8"
+  }
+}

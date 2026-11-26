@@ -1,6 +1,7 @@
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, it } from 'node:test';
 import { EventType, type BaseEvent } from '@ag-ui/core';
 import type { UIMessageChunk } from 'ai';
 import {
@@ -10,7 +11,7 @@ import {
   type UnmappedReport,
 } from '../src/index.js';
 import { startMockAgUiServer } from '../src/testing/index.js';
-import { collect, user, validateChunks } from './helpers.js';
+import { assertMatch, collect, repoRoot, user, validateChunks } from './helpers.js';
 
 const E = (e: Record<string, unknown>) => e as unknown as BaseEvent;
 
@@ -32,7 +33,7 @@ const streamOf = (chunks: UIMessageChunk[]) =>
 async function partsOf(events: BaseEvent[], opts = {}) {
   const { chunks } = run(events, opts);
   const { message, schemaFailures } = await collect(streamOf(chunks));
-  expect(schemaFailures).toEqual([]);
+  assert.deepStrictEqual(schemaFailures, []);
   return (message!.parts as Array<Record<string, any>>).map(({ providerMetadata: _p, callProviderMetadata: _c, ...rest }) => rest);
 }
 
@@ -40,14 +41,21 @@ async function partsOf(events: BaseEvent[], opts = {}) {
 async function fullPartsOf(events: BaseEvent[]) {
   const { chunks } = run(events);
   const { message, schemaFailures } = await collect(streamOf(chunks));
-  expect(schemaFailures).toEqual([]);
+  assert.deepStrictEqual(schemaFailures, []);
   return message!.parts;
 }
 
 /** test/fixtures/chunked.parts.json: the parts the 'chunked' scenario must produce. */
 const GOLDEN_CHUNKED_PARTS = JSON.parse(
-  readFileSync(resolve(import.meta.dirname, 'fixtures/chunked.parts.json'), 'utf8'),
+  readFileSync(resolve(repoRoot, 'test/fixtures/chunked.parts.json'), 'utf8'),
 ) as unknown[];
+
+/**
+ * The parts as they would be stored or sent as JSON. The AI SDK leaves some keys present
+ * with the value `undefined` (`output`, `title`, ...); JSON has no `undefined`, so those
+ * keys drop out and the result can be compared strictly with the golden file.
+ */
+const asJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 
 const started = E({ type: EventType.RUN_STARTED, threadId: 't', runId: 'r' });
 const finished = E({ type: EventType.RUN_FINISHED, threadId: 't', runId: 'r' });
@@ -80,14 +88,17 @@ describe('AC-5 chunk expansion', () => {
     ];
     const a = await partsOf(expanded);
     const b = await partsOf(chunked);
-    expect(b).toEqual(a);
-    expect(b.map((p) => p.type)).toEqual(['step-start', 'reasoning', 'text', 'dynamic-tool']);
-    expect(b[2]!.text).toBe('Hello');
-    expect(b[3]).toMatchObject({ toolName: 'getWeather', input: { city: 'Busan' }, state: 'input-available' });
+    assert.deepStrictEqual(b, a);
+    assert.deepStrictEqual(
+      b.map((p) => p.type),
+      ['step-start', 'reasoning', 'text', 'dynamic-tool'],
+    );
+    assert.equal(b[2]!.text, 'Hello');
+    assertMatch(b[3], { toolName: 'getWeather', input: { city: 'Busan' }, state: 'input-available' });
 
     // Golden file: both forms give exactly the stored parts, AG-UI ids in providerMetadata included.
-    expect(await fullPartsOf(expanded)).toEqual(GOLDEN_CHUNKED_PARTS);
-    expect(await fullPartsOf(chunked)).toEqual(GOLDEN_CHUNKED_PARTS);
+    assert.deepStrictEqual(asJson(await fullPartsOf(expanded)), GOLDEN_CHUNKED_PARTS);
+    assert.deepStrictEqual(asJson(await fullPartsOf(chunked)), GOLDEN_CHUNKED_PARTS);
   });
 
   it("the mock server's 'chunked' scenario, sent over HTTP through the transport, matches the golden file", async () => {
@@ -103,8 +114,8 @@ describe('AC-5 chunk expansion', () => {
           abortSignal: undefined,
         }),
       );
-      expect(schemaFailures).toEqual([]);
-      expect(message!.parts).toEqual(GOLDEN_CHUNKED_PARTS);
+      assert.deepStrictEqual(schemaFailures, []);
+      assert.deepStrictEqual(asJson(message!.parts), GOLDEN_CHUNKED_PARTS);
     } finally {
       await server.close();
     }
@@ -117,7 +128,10 @@ describe('AC-5 chunk expansion', () => {
       E({ type: EventType.TEXT_MESSAGE_CHUNK, messageId: 'b', delta: '2' }),
       finished,
     ]);
-    expect(chunks.filter((c) => c.type === 'text-end').map((c) => (c as { id: string }).id)).toEqual(['a', 'b']);
+    assert.deepStrictEqual(
+      chunks.filter((c) => c.type === 'text-end').map((c) => (c as { id: string }).id),
+      ['a', 'b'],
+    );
   });
 });
 
@@ -131,10 +145,10 @@ describe('AC-5 tool handling', () => {
       finished,
     ];
     const { chunks, reports } = run(events);
-    expect(chunks.some((c) => c.type === 'tool-input-error')).toBe(true);
-    expect(reports).toHaveLength(1);
-    expect(reports[0]).toMatchObject({ eventType: 'TOOL_CALL_END', reason: 'invalid-tool-args' });
-    expect(await validateChunks(chunks)).toEqual([]);
+    assert.equal(chunks.some((c) => c.type === 'tool-input-error'), true);
+    assert.equal(reports.length, 1);
+    assertMatch(reports[0], { eventType: 'TOOL_CALL_END', reason: 'invalid-tool-args' });
+    assert.deepStrictEqual(await validateChunks(chunks), []);
   });
 
   it('TOOL_CALL_RESULT becomes tool-output-available (JSON parsed) and marks the tool providerExecuted', async () => {
@@ -151,13 +165,19 @@ describe('AC-5 tool handling', () => {
     ];
     const { chunks } = run(events);
     const outs = chunks.filter((c) => c.type === 'tool-output-available') as Array<{ output: unknown; providerExecuted?: boolean }>;
-    expect(outs.map((o) => o.output)).toEqual([{ hits: 2 }, 'just text']);
-    expect(outs.every((o) => o.providerExecuted === true)).toBe(true);
+    assert.deepStrictEqual(
+      outs.map((o) => o.output),
+      [{ hits: 2 }, 'just text'],
+    );
+    assert.equal(outs.every((o) => o.providerExecuted === true), true);
     const parts = await partsOf(events);
-    expect(parts.filter((p) => p.type === 'dynamic-tool').map((p) => [p.state, p.providerExecuted])).toEqual([
-      ['output-available', true],
-      ['output-available', true],
-    ]);
+    assert.deepStrictEqual(
+      parts.filter((p) => p.type === 'dynamic-tool').map((p) => [p.state, p.providerExecuted]),
+      [
+        ['output-available', true],
+        ['output-available', true],
+      ],
+    );
   });
 
   it('clientToolNames marks every other tool as server executed from the start', () => {
@@ -178,7 +198,10 @@ describe('AC-5 tool handling', () => {
         c.providerExecuted,
       ]),
     );
-    expect(byId).toEqual({ a: undefined, b: true });
+    // The browser tool has no providerExecuted flag at all; the server tool has it set.
+    assert.equal(byId.a, undefined);
+    assert.equal(byId.b, true);
+    assert.deepStrictEqual(Object.keys(byId).sort(), ['a', 'b']);
   });
 
   it('tool name from TOOL_CALL_START is remembered for TOOL_CALL_END', () => {
@@ -188,14 +211,17 @@ describe('AC-5 tool handling', () => {
       E({ type: EventType.TOOL_CALL_END, toolCallId: 'a' }),
       finished,
     ]);
-    expect(chunks.find((c) => c.type === 'tool-input-available')).toMatchObject({ toolName: 'remember', input: {} });
+    assertMatch(
+      chunks.find((c) => c.type === 'tool-input-available'),
+      { toolName: 'remember', input: {} },
+    );
   });
 });
 
 describe('lifecycle', () => {
   it('always sets a non-empty start messageId', () => {
     const { chunks } = run([started, finished]);
-    expect(chunks[0]).toMatchObject({ type: 'start', messageId: 'gen-id', messageMetadata: { runId: 'r', threadId: 't' } });
+    assertMatch(chunks[0], { type: 'start', messageId: 'gen-id', messageMetadata: { runId: 'r', threadId: 't' } });
   });
 
   it('orphan events are reported instead of crashing the stream', async () => {
@@ -206,22 +232,28 @@ describe('lifecycle', () => {
       finished,
     ];
     const { chunks, reports } = run(events);
-    expect(reports.map((r) => r.reason)).toEqual(['orphan-event', 'orphan-event']);
-    expect(await validateChunks(chunks)).toEqual([]);
+    assert.deepStrictEqual(
+      reports.map((r) => r.reason),
+      ['orphan-event', 'orphan-event'],
+    );
+    assert.deepStrictEqual(await validateChunks(chunks), []);
   });
 
   it('closes open parts and finishes when the stream ends without RUN_FINISHED', async () => {
     const { chunks } = run([started, E({ type: EventType.TEXT_MESSAGE_START, messageId: 'm', role: 'assistant' }), E({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: 'm', delta: 'hi' })]);
-    expect(chunks.map((c) => c.type).slice(-3)).toEqual(['text-end', 'finish-step', 'finish']);
+    assert.deepStrictEqual(
+      chunks.map((c) => c.type).slice(-3),
+      ['text-end', 'finish-step', 'finish'],
+    );
   });
 
   it('nothing follows an error chunk', () => {
     const c = createAgUiChunkConverter({ generateId: () => 'id' });
     c.push(started);
     const err = c.push(E({ type: EventType.RUN_ERROR, message: 'bad' }));
-    expect(err.at(-1)).toEqual({ type: 'error', errorText: 'bad' });
-    expect(c.push(E({ type: EventType.TEXT_MESSAGE_START, messageId: 'm' }))).toEqual([]);
-    expect(c.finish()).toEqual([]);
+    assert.deepStrictEqual(err.at(-1), { type: 'error', errorText: 'bad' });
+    assert.deepStrictEqual(c.push(E({ type: EventType.TEXT_MESSAGE_START, messageId: 'm' })), []);
+    assert.deepStrictEqual(c.finish(), []);
   });
 
   it('a throwing onUnmapped callback does not break the stream', () => {
@@ -231,7 +263,7 @@ describe('lifecycle', () => {
         throw new Error('user bug');
       },
     });
-    expect(() => c.push(E({ type: EventType.CUSTOM, name: 'n', value: 1 }))).not.toThrow();
+    assert.doesNotThrow(() => c.push(E({ type: EventType.CUSTOM, name: 'n', value: 1 })));
   });
 
   it('works as a TransformStream', async () => {
@@ -249,6 +281,9 @@ describe('lifecycle', () => {
       if (done) break;
       out.push(value);
     }
-    expect(out.map((c) => c.type)).toEqual(['start', 'start-step', 'text-start', 'text-delta', 'text-end', 'finish-step', 'finish']);
+    assert.deepStrictEqual(
+      out.map((c) => c.type),
+      ['start', 'start-step', 'text-start', 'text-delta', 'text-end', 'finish-step', 'finish'],
+    );
   });
 });

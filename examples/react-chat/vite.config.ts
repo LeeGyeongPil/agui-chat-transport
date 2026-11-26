@@ -43,6 +43,9 @@ export default defineConfig({
       // Use the library sources directly, as an installed app would use the package.
       'agui-chat-transport': src('index.ts'),
     },
+    // The library sources live outside this package (../../src). Resolve their imports from
+    // this package's own node_modules, so the page uses one copy of each.
+    dedupe: ['ai', '@ag-ui/client', '@ag-ui/core', 'fast-json-patch', 'react', 'react-dom'],
   },
   server: { host: '127.0.0.1' },
 });
