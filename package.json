@@ -1,6 +1,6 @@
 {
   "name": "agui-chat-transport",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Use any AG-UI agent server from AI SDK useChat: a ChatTransport that converts AG-UI events to UIMessage chunks and back, and reports what it cannot map.",
   "repository": { "type": "git", "url": "git+https://github.com/LeeGyeongPil/agui-chat-transport.git" },
   "homepage": "https://github.com/LeeGyeongPil/agui-chat-transport#readme",

@@ -3,6 +3,13 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-11-26
+
+### Changed
+- CI runs on `ubuntu-24.04` instead of `ubuntu-latest`, which moved to Ubuntu 26.04 in November 2026 while early 26.04 images froze during native `tsc` 7 steps (actions/runner-images#15343). The job is split into named steps (versions, install, native binary check, typecheck, build, test, pack, example) with a diagnostics step after a failure, so a failing run names what broke.
+- `scripts/check-native.mjs` (repository only, not published) checks that the native `tsc`, esbuild and rolldown binaries load on the current platform.
+- The quickstart child-process tests print exit code, signal, run time and full output when they fail.
+
 ## [0.1.1] - 2026-11-25
 
 ### Fixed
