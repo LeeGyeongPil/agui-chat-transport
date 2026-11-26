@@ -61,10 +61,13 @@ interface ChildResult {
   code: number | null;
   stdout: string;
   stderr: string;
+  /** Everything needed to tell why a child failed (exit code, signal, time, output) in a CI log. */
+  why: string;
 }
 
 /** Run the quickstart with only the given environment; resolves when the child exits. */
 function quickstart(args: string[], env: Record<string, string> = {}): Promise<ChildResult> {
+  const started = Date.now();
   return new Promise((resolveRun) => {
     execFile(
       process.execPath,
@@ -72,13 +75,28 @@ function quickstart(args: string[], env: Record<string, string> = {}): Promise<C
       {
         cwd: root,
         encoding: 'utf8',
-        env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env },
+        // Minimal environment so the parent's locale cannot leak in. TMPDIR is kept so tsx
+        // writes its cache where the parent would (sandboxed or CI temp folders).
+        env: {
+          PATH: process.env.PATH ?? '',
+          HOME: process.env.HOME ?? '',
+          ...(process.env.TMPDIR ? { TMPDIR: process.env.TMPDIR } : {}),
+          ...env,
+        },
         timeout: CHILD_KILL_MS,
       },
       (error, stdout, stderr) => {
         // A non-zero exit is a normal result here (the unreachable-server case expects 1).
         const code = error ? (typeof error.code === 'number' ? error.code : null) : 0;
-        resolveRun({ code, stdout, stderr });
+        const signal = error && 'signal' in error ? error.signal : null;
+        const killed = error && 'killed' in error ? error.killed : false;
+        const why = [
+          `quickstart ${args.join(' ')} env=${JSON.stringify(env)}`,
+          `exit=${code} signal=${signal ?? ''} killedByTimeout=${killed} after ${Date.now() - started} ms`,
+          `--- stdout ---\n${stdout}`,
+          `--- stderr ---\n${stderr}`,
+        ].join('\n');
+        resolveRun({ code, stdout, stderr, why });
       },
     );
   });
@@ -94,11 +112,11 @@ describe('AC-8/AC-9 quickstart in a child process', () => {
         quickstart([], { LANG: 'ko_KR.UTF-8' }),
         quickstart([], { LANG: 'ja_JP.UTF-8' }),
       ]);
-      for (const r of [flag, toolEnv, langKo, langJa]) expect(r.code, r.stderr).toBe(0);
-      expect(flag.stdout).toContain('도구 왕복: 성공');
-      expect(toolEnv.stdout).toContain('도구 왕복: 성공');
-      expect(langKo.stdout).toContain('미대응 이벤트: 1건 (CUSTOM)');
-      expect(langJa.stdout).toContain('Tool round trip: OK');
+      for (const r of [flag, toolEnv, langKo, langJa]) expect(r.code, r.why).toBe(0);
+      expect(flag.stdout, flag.why).toContain('도구 왕복: 성공');
+      expect(toolEnv.stdout, toolEnv.why).toContain('도구 왕복: 성공');
+      expect(langKo.stdout, langKo.why).toContain('미대응 이벤트: 1건 (CUSTOM)');
+      expect(langJa.stdout, langJa.why).toContain('Tool round trip: OK');
     },
     CHILD_TEST_MS,
   );
@@ -107,9 +125,9 @@ describe('AC-8/AC-9 quickstart in a child process', () => {
     'prints English with --lang en and reports the CUSTOM event',
     async () => {
       const r = await quickstart(['--lang', 'en'], { LANG: 'ko_KR.UTF-8' });
-      expect(r.code, r.stderr).toBe(0);
-      expect(r.stdout).toContain('Tool round trip: OK');
-      expect(r.stdout).toContain('Unmapped events: 1 (CUSTOM)');
+      expect(r.code, r.why).toBe(0);
+      expect(r.stdout, r.why).toContain('Tool round trip: OK');
+      expect(r.stdout, r.why).toContain('Unmapped events: 1 (CUSTOM)');
     },
     CHILD_TEST_MS,
   );
@@ -127,11 +145,11 @@ describe('AC-8/AC-9 quickstart in a child process', () => {
       results.forEach((r, i) => {
         const [lang, head] = cases[i]!;
         const out = r.stdout + r.stderr;
-        expect(r.code, lang).toBe(1);
-        expect(out).toContain(head);
-        expect(out).toContain('Could not reach the AG-UI server at http://127.0.0.1:9/agent');
-        expect(out).not.toContain('Run 2');
-        expect(out).not.toContain('Tool round trip');
+        expect(r.code, `${lang}\n${r.why}`).toBe(1);
+        expect(out, r.why).toContain(head);
+        expect(out, r.why).toContain('Could not reach the AG-UI server at http://127.0.0.1:9/agent');
+        expect(out, r.why).not.toContain('Run 2');
+        expect(out, r.why).not.toContain('Tool round trip');
       });
     },
     CHILD_TEST_MS,
